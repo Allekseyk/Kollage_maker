@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Виртуальное окружение
+venv/
+env/
+ENV/
+.venv/
+
+# Переменные окружения (секретные данные!)
+.env
+.env.local
+.env.*.local
+
+# Базы данных
+*.db
+*.sqlite
+*.sqlite3
+
+# Логи
+*.log
+uvicorn.log
+*.log.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Операционная система
+.DS_Store
+Thumbs.db
+
+# Большие файлы с изображениями (не загружаем в репозиторий)
+interior-collage/skript/1/
+interior-collage/skript/2/
+
+# Excel файлы с данными (если они большие)
+*.xlsx
+*.xls
+
+# CSV/XML файлы с экспортом данных
+*.csv
+*.xml
+
+# Временные файлы
+*.tmp
+*.bak
+*.cache
+
+# Статические файлы сборки (если есть)
+dist/
+build/
+*.egg-info/

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Interior Collage Builder - MVP</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="/static/styles.css" rel="stylesheet" />
+  <script src="https://unpkg.com/konva@9/konva.min.js"></script>
+  <!-- Убраны строгие COOP/COEP/ CORP политики, чтобы разрешить загрузку картинок с внешних доменов -->
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <input id="search" class="input" type="text" placeholder="Поиск..." />
+        <select id="category" class="input"></select>
+      </div>
+      <div id="products" class="products"></div>
+    </aside>
+    <main class="canvas-area">
+      <div class="toolbar">
+        <button id="btnClear" class="btn">Очистить</button>
+        <button id="btnDelete" class="btn">Удалить выбранное</button>
+        <button id="btnExport" class="btn">Экспорт PNG</button>
+      </div>
+      <div id="stage-container" class="stage-container"></div>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+  
+</body>
+<!-- Конец документа -->
+</html>
+
+
