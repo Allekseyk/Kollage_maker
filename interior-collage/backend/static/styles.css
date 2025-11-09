@@ -8,8 +8,11 @@
 .card img{width:100%;height:120px;object-fit:cover;border-radius:6px}
 .card .name{font-size:12px;line-height:1.2}
 .canvas-area{flex:1;display:flex;flex-direction:column}
-.toolbar{border-bottom:1px solid #e5e7eb;padding:8px;display:flex;gap:8px}
-.btn{padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;cursor:pointer}
+.toolbar{border-bottom:1px solid #e5e7eb;padding:8px;display:flex;gap:8px;align-items:center}
+.btn{padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;cursor:pointer;transition:all 0.2s}
+.btn:hover{background:#e5e7eb}
+.btn.active{background:#4A90E2;color:white;border-color:#2563EB}
+.btn.active#btnEraser{background:#EF4444;border-color:#DC2626}
 .stage-container{flex:1;background:#f3f4f6;position:relative}
 
 
