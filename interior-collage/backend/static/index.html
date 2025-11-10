@@ -23,14 +23,34 @@
         <button id="btnDelete" class="btn">Удалить выбранное</button>
         <button id="btnTransform" class="btn">Транспортировать</button>
         <button id="btnEraser" class="btn">Ластик</button>
+        <div class="eraser-controls" id="eraserControls" style="display: none;">
+          <label style="font-size: 12px; margin-left: 8px;">Радиус:</label>
+          <input type="range" id="eraserSize" min="5" max="100" value="30" style="width: 120px; margin-left: 4px;">
+          <span id="eraserSizeValue" style="font-size: 12px; margin-left: 4px; color: #6B7280;">30px</span>
+        </div>
         <button id="btnExport" class="btn">Экспорт PNG</button>
         <span id="mode-indicator" style="margin-left: 12px; font-size: 12px; color: #6B7280; align-self: center;"></span>
       </div>
       <div id="stage-container" class="stage-container"></div>
     </main>
+    <aside class="layers-panel">
+      <div class="layers-header">
+        <h3>Слои</h3>
+      </div>
+      <div id="layers-list" class="layers-list"></div>
+    </aside>
   </div>
 
-  <script src="/static/app.js"></script>
+  <!-- Подключаем модули приложения -->
+  <!-- ВАЖНО: Порядок подключения имеет значение! -->
+  <script src="/static/js/utils.js"></script>      <!-- 1. Вспомогательные функции -->
+  <script src="/static/js/api.js"></script>        <!-- 2. API запросы -->
+  <script src="/static/js/canvas.js"></script>     <!-- 3. Холст Konva -->
+  <script src="/static/js/perspective.js"></script><!-- 4. Режим транспортировки -->
+  <script src="/static/js/eraser.js"></script>     <!-- 5. Ластик -->
+  <script src="/static/js/layers.js"></script>     <!-- 6. Управление слоями -->
+  <script src="/static/js/catalog.js"></script>    <!-- 7. Каталог товаров -->
+  <script src="/static/app.js"></script>           <!-- 8. Главный файл -->
   
 </body>
 <!-- Конец документа -->
