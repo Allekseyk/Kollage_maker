@@ -1,575 +1,578 @@
 // ========================================
-// МОДУЛЬ: PERSPECTIVE (Перспективная трансформация)
-// Отвечает за режим "Транспортировка" с якорями
+// МОДУЛЬ: 3D-ПРЕОБРАЗОВАНИЕ (PERSPECTIVE)
+// Отвечает за перспективную трансформацию изображений
 // ========================================
 
-// Глобальные переменные состояния
-window.activePerspectiveGroup = null;
-window.perspectiveMode = false;
+// Глобальные переменные для модального окна
+window.activePerspectiveGroup = null; // Текущая выбранная группа для трансформации
 
-const btnTransform = document.getElementById('btnTransform');
+// ========================================
+// МАТЕМАТИЧЕСКИЕ ФУНКЦИИ ДЛЯ 3D-ТРАНСФОРМАЦИИ
+// ========================================
 
-// Переключение режима перспективы
-function togglePerspectiveMode() {
-  window.perspectiveMode = !window.perspectiveMode;
-  
-  console.log('Переключение режима транспортировки:', window.perspectiveMode);
-  
-  // Отключаем ластик при включении режима транспортировки
-  if (window.perspectiveMode && window.eraserMode) {
-    setEraserMode(false);
-  }
-  
-  // Обновляем состояние кнопки
-  if (btnTransform) {
-    if (window.perspectiveMode) {
-      btnTransform.classList.add('active');
-      btnTransform.style.backgroundColor = '#4A90E2';
-      btnTransform.style.color = 'white';
-    } else {
-      btnTransform.classList.remove('active');
-      btnTransform.style.backgroundColor = '';
-      btnTransform.style.color = '';
-    }
-  }
-  
-  if (window.perspectiveMode) {
-    // ВКЛЮЧАЕМ режим транспортировки
-    const transformerNodes = window.canvasTransformer.nodes();
-    let selectedGroup = null;
-    
-    // Находим выбранное изображение
-    if (transformerNodes && transformerNodes.length > 0) {
-      selectedGroup = transformerNodes[0];
-    } else {
-      // Ищем через getImageGroups
-      const allGroups = getImageGroups();
-      selectedGroup = allGroups.find(g => g.hasName('selected'));
-    }
-    
-    // Убираем стандартный трансформер
-    window.canvasTransformer.nodes([]);
-    
-    // Обновляем все изображения - прячем перспективу
-    getImageGroups().forEach(g => {
-      if (g.normalImage) g.normalImage.visible(true);
-      if (g.perspectiveShape) g.perspectiveShape.visible(false);
-      if (g.anchors) {
-        g.anchors.forEach(a => a.visible(false));
-      }
-    });
-    
-    // Если было выбранное изображение - показываем для него якоря
-    if (selectedGroup && selectedGroup.hasName('image-item')) {
-      console.log('Показываем якоря для группы:', selectedGroup);
-      showPerspectiveControls(selectedGroup);
-    } else {
-      console.log('Выбранное изображение не найдено');
-    }
-  } else {
-    // ВЫКЛЮЧАЕМ режим транспортировки
-    const previousActive = window.activePerspectiveGroup;
-    
-    // Прячем все якоря
-    getImageGroups().forEach(g => {
-      if (g.anchors) {
-        g.anchors.forEach(a => a.visible(false));
-      }
-      if (g.normalImage) g.normalImage.visible(true);
-      if (g.perspectiveShape) g.perspectiveShape.visible(false);
-      if (g.updateMode) g.updateMode();
-    });
-    
-    window.activePerspectiveGroup = null;
-    
-    // Если было активное изображение - выбираем его в обычном режиме
-    if (previousActive && previousActive.hasName('image-item')) {
-      window.canvasTransformer.nodes([previousActive]);
-      previousActive.addName('selected');
-    }
-  }
-  
-  window.canvasLayer.draw();
-  updateModeIndicator();
-  updateLayersList();
+// Преобразует градусы в радианы
+function toRadians(degrees) {
+  return degrees * Math.PI / 180;
 }
 
-// Обновление индикатора режима
-function updateModeIndicator() {
-  const indicator = document.getElementById('mode-indicator');
-  if (indicator) {
-    if (window.perspectiveMode) {
-      indicator.textContent = 'Режим транспортировки';
-      indicator.style.color = '#4A90E2';
-    } else if (window.eraserMode) {
-      indicator.textContent = 'Режим ластика';
-      indicator.style.color = '#EF4444';
-    } else {
-      indicator.textContent = 'Обычный режим';
-      indicator.style.color = '#6B7280';
-    }
-  }
+// Матрица вращения вокруг оси X (наклон вверх/вниз)
+function rotationMatrixX(angle) {
+  const rad = toRadians(angle);
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return [
+    [1, 0, 0],
+    [0, cos, -sin],
+    [0, sin, cos]
+  ];
 }
 
-// Функция для перспективной трансформации через canvas
-function perspectiveTransform(ctx, img, corners) {
-  const width = img.width;
-  const height = img.height;
+// Матрица вращения вокруг оси Y (поворот влево/вправо)
+function rotationMatrixY(angle) {
+  const rad = toRadians(angle);
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return [
+    [cos, 0, sin],
+    [0, 1, 0],
+    [-sin, 0, cos]
+  ];
+}
+
+// Матрица вращения вокруг оси Z (вращение по часовой стрелке)
+function rotationMatrixZ(angle) {
+  const rad = toRadians(angle);
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return [
+    [cos, -sin, 0],
+    [sin, cos, 0],
+    [0, 0, 1]
+  ];
+}
+
+// Умножение матриц 3x3
+function multiplyMatrices(a, b) {
+  const result = [
+    [0, 0, 0],
+    [0, 0, 0],
+    [0, 0, 0]
+  ];
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) {
+      for (let k = 0; k < 3; k++) {
+        result[i][j] += a[i][k] * b[k][j];
+      }
+    }
+  }
+  return result;
+}
+
+// Умножение матрицы на вектор
+function multiplyMatrixVector(matrix, vector) {
+  return [
+    matrix[0][0] * vector[0] + matrix[0][1] * vector[1] + matrix[0][2] * vector[2],
+    matrix[1][0] * vector[0] + matrix[1][1] * vector[1] + matrix[1][2] * vector[2],
+    matrix[2][0] * vector[0] + matrix[2][1] * vector[1] + matrix[2][2] * vector[2]
+  ];
+}
+
+// Перспективная проекция (превращает 3D-координаты в 2D)
+function perspectiveProjection(x, y, z, focalLength, distance) {
+  // Формула перспективной проекции
+  // x_proj = f * x / (z + d)
+  // y_proj = f * y / (z + d)
+  const factor = focalLength / (z + distance);
+  return {
+    x: x * factor,
+    y: y * factor
+  };
+}
+
+// Вычисляет матрицу перспективной трансформации из четырёх точек
+// src - исходные точки (четыре угла прямоугольника)
+// dst - целевые точки (четыре угла после трансформации)
+// Возвращает матрицу [a, b, c, d, e, f] для setTransform
+function getPerspectiveMatrix(src, dst) {
+  // Используем упрощённый алгоритм для аффинной трансформации
+  // Это даёт хороший результат для небольших углов перспективы
   
+  // Вычисляем коэффициенты через систему уравнений
+  const x0 = src[0].x, y0 = src[0].y;
+  const x1 = src[1].x, y1 = src[1].y;
+  const x2 = src[2].x, y2 = src[2].y;
+  const x3 = src[3].x, y3 = src[3].y;
+  
+  const u0 = dst[0].x, v0 = dst[0].y;
+  const u1 = dst[1].x, v1 = dst[1].y;
+  const u2 = dst[2].x, v2 = dst[2].y;
+  const u3 = dst[3].x, v3 = dst[3].y;
+  
+  // Решаем систему уравнений для аффинной трансформации
+  // Используем метод наименьших квадратов для более точного результата
+  
+  // Вычисляем матрицу через метод четырёх точек
+  // Для перспективной трансформации используем гомогенные координаты
+  const A = [
+    [x0, y0, 1, 0, 0, 0],
+    [0, 0, 0, x0, y0, 1],
+    [x1, y1, 1, 0, 0, 0],
+    [0, 0, 0, x1, y1, 1],
+    [x2, y2, 1, 0, 0, 0],
+    [0, 0, 0, x2, y2, 1]
+  ];
+  
+  const b = [u0, v0, u1, v1, u2, v2];
+  
+  // Решаем систему Ax = b методом Гаусса
+  const result = solveLinearSystem(A, b);
+  
+  if (result) {
+    return [
+      result[0], result[3],  // a, c
+      result[1], result[4],  // b, d
+      result[2], result[5]    // e, f
+    ];
+  }
+  
+  // Если решение не найдено, возвращаем единичную матрицу
+  return [1, 0, 0, 1, 0, 0];
+}
+
+// Решает систему линейных уравнений методом Гаусса
+function solveLinearSystem(A, b) {
+  const n = A.length;
+  const augmented = A.map((row, i) => [...row, b[i]]);
+  
+  // Прямой ход метода Гаусса
+  for (let i = 0; i < n; i++) {
+    // Поиск максимального элемента в столбце
+    let maxRow = i;
+    for (let k = i + 1; k < n; k++) {
+      if (Math.abs(augmented[k][i]) > Math.abs(augmented[maxRow][i])) {
+        maxRow = k;
+      }
+    }
+    
+    // Перестановка строк
+    [augmented[i], augmented[maxRow]] = [augmented[maxRow], augmented[i]];
+    
+    // Проверка на вырожденность
+    if (Math.abs(augmented[i][i]) < 1e-10) {
+      return null;
+    }
+    
+    // Исключение
+    for (let k = i + 1; k < n; k++) {
+      const factor = augmented[k][i] / augmented[i][i];
+      for (let j = i; j < n + 1; j++) {
+        augmented[k][j] -= factor * augmented[i][j];
+      }
+    }
+  }
+  
+  // Обратный ход
+  const x = new Array(n);
+  for (let i = n - 1; i >= 0; i--) {
+    x[i] = augmented[i][n];
+    for (let j = i + 1; j < n; j++) {
+      x[i] -= augmented[i][j] * x[j];
+    }
+    x[i] /= augmented[i][i];
+  }
+  
+  return x;
+}
+
+// Рисует треугольник с перспективной трансформацией через пиксельную интерполяцию
+// ctx - контекст canvas
+// img - изображение для рисования
+// src1, src2, src3 - исходные координаты трёх точек треугольника в изображении
+// dst1, dst2, dst3 - целевые координаты трёх точек треугольника на холсте
+function drawPerspectiveTriangle(ctx, img, src1, src2, src3, dst1, dst2, dst3) {
+  // Вычисляем размеры bounding box для треугольника
+  const minX = Math.min(dst1.x, dst2.x, dst3.x);
+  const minY = Math.min(dst1.y, dst2.y, dst3.y);
+  const maxX = Math.max(dst1.x, dst2.x, dst3.x);
+  const maxY = Math.max(dst1.y, dst2.y, dst3.y);
+  
+  const width = Math.ceil(maxX - minX);
+  const height = Math.ceil(maxY - minY);
+  
+  if (width <= 0 || height <= 0) return;
+  
+  // Создаём временный canvas для треугольника
   const tempCanvas = document.createElement('canvas');
   tempCanvas.width = width;
   tempCanvas.height = height;
   const tempCtx = tempCanvas.getContext('2d');
+  
+  // Смещаем координаты в начало координат временного canvas
+  const d1 = { x: dst1.x - minX, y: dst1.y - minY };
+  const d2 = { x: dst2.x - minX, y: dst2.y - minY };
+  const d3 = { x: dst3.x - minX, y: dst3.y - minY };
+  
+  // Вычисляем матрицу аффинной трансформации для треугольника
+  const matrix = getTriangleTransform(src1, src2, src3, d1, d2, d3);
+  
+  if (!matrix) return;
+  
+  // Создаём маску для треугольника
+  tempCtx.beginPath();
+  tempCtx.moveTo(d1.x, d1.y);
+  tempCtx.lineTo(d2.x, d2.y);
+  tempCtx.lineTo(d3.x, d3.y);
+  tempCtx.closePath();
+  tempCtx.clip();
+  
+  // Применяем трансформацию
+  tempCtx.setTransform(
+    matrix[0], matrix[1],
+    matrix[2], matrix[3],
+    matrix[4], matrix[5]
+  );
+  
+  // Рисуем изображение на временном canvas
   tempCtx.drawImage(img, 0, 0);
   
-  const minX = Math.min(corners[0].x, corners[1].x, corners[2].x, corners[3].x);
-  const maxX = Math.max(corners[0].x, corners[1].x, corners[2].x, corners[3].x);
-  const minY = Math.min(corners[0].y, corners[1].y, corners[2].y, corners[3].y);
-  const maxY = Math.max(corners[0].y, corners[1].y, corners[2].y, corners[3].y);
-  
-  const destWidth = maxX - minX;
-  const destHeight = maxY - minY;
-  
-  const resultCanvas = document.createElement('canvas');
-  resultCanvas.width = Math.ceil(destWidth);
-  resultCanvas.height = Math.ceil(destHeight);
-  const resultCtx = resultCanvas.getContext('2d');
-  
-  const normalizedCorners = corners.map(c => ({
-    x: c.x - minX,
-    y: c.y - minY
-  }));
-  
-  const gridSize = 20;
-  const cols = Math.ceil(width / gridSize);
-  const rows = Math.ceil(height / gridSize);
-  
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const srcX1 = col * gridSize;
-      const srcY1 = row * gridSize;
-      const srcX2 = Math.min((col + 1) * gridSize, width);
-      const srcY2 = Math.min((row + 1) * gridSize, height);
-      
-      const u1 = srcX1 / width;
-      const v1 = srcY1 / height;
-      const u2 = srcX2 / width;
-      const v2 = srcY2 / height;
-      
-      const topLeft = {
-        x: normalizedCorners[0].x * (1 - u1) + normalizedCorners[1].x * u1,
-        y: normalizedCorners[0].y * (1 - u1) + normalizedCorners[1].y * u1
-      };
-      const topRight = {
-        x: normalizedCorners[0].x * (1 - u2) + normalizedCorners[1].x * u2,
-        y: normalizedCorners[0].y * (1 - u2) + normalizedCorners[1].y * u2
-      };
-      const bottomLeft = {
-        x: normalizedCorners[2].x * (1 - u1) + normalizedCorners[3].x * u1,
-        y: normalizedCorners[2].y * (1 - u1) + normalizedCorners[3].y * u1
-      };
-      const bottomRight = {
-        x: normalizedCorners[2].x * (1 - u2) + normalizedCorners[3].x * u2,
-        y: normalizedCorners[2].y * (1 - u2) + normalizedCorners[3].y * u2
-      };
-      
-      const destX1 = topLeft.x * (1 - v1) + bottomLeft.x * v1;
-      const destY1 = topLeft.y * (1 - v1) + bottomLeft.y * v1;
-      const destX2 = topRight.x * (1 - v1) + bottomRight.x * v1;
-      const destY2 = topRight.y * (1 - v1) + bottomRight.y * v1;
-      const destX3 = topLeft.x * (1 - v2) + bottomLeft.x * v2;
-      const destY3 = topLeft.y * (1 - v2) + bottomLeft.y * v2;
-      const destX4 = topRight.x * (1 - v2) + bottomRight.x * v2;
-      const destY4 = topRight.y * (1 - v2) + bottomRight.y * v2;
-      
-      resultCtx.save();
-      resultCtx.beginPath();
-      resultCtx.moveTo(destX1, destY1);
-      resultCtx.lineTo(destX2, destY2);
-      resultCtx.lineTo(destX4, destY4);
-      resultCtx.lineTo(destX3, destY3);
-      resultCtx.closePath();
-      resultCtx.clip();
-      
-      const dx = destX2 - destX1;
-      const dy = destY2 - destY1;
-      const dw = srcX2 - srcX1;
-      const dh = srcY2 - srcY1;
-      
-      if (dw > 0 && dh > 0) {
-        resultCtx.transform(
-          dx / dw, (destY2 - destY1) / dw,
-          (destX3 - destX1) / dh, dy / dh,
-          destX1 - srcX1 * (dx / dw), destY1 - srcY1 * (dy / dh)
-        );
-        resultCtx.drawImage(tempCanvas, srcX1, srcY1, dw, dh, 0, 0, dw, dh);
-      }
-      resultCtx.restore();
-    }
-  }
-  
-  ctx.drawImage(resultCanvas, minX, minY);
+  // Рисуем временный canvas на основном холсте
+  ctx.drawImage(tempCanvas, minX, minY);
 }
 
-// Показать элементы управления перспективой
-function showPerspectiveControls(group) {
-  console.log('showPerspectiveControls вызвана для группы:', group);
+// Вычисляет матрицу аффинной трансформации для треугольника
+function getTriangleTransform(src1, src2, src3, dst1, dst2, dst3) {
+  // Решаем систему уравнений для аффинной трансформации
+  // x' = a*x + b*y + c
+  // y' = d*x + e*y + f
   
-  if (!group) {
-    console.warn('Группа не передана');
-    return;
-  }
-  
-  if (!group.anchors || !Array.isArray(group.anchors) || group.anchors.length === 0) {
-    console.warn('Группа не имеет якорей:', group);
-    return;
-  }
-  
-  if (!window.perspectiveMode) {
-    console.warn('Режим транспортировки не включен');
-    return;
-  }
-  
-  window.activePerspectiveGroup = group;
-  
-  // Показываем якоря
-  group.anchors.forEach((anchor, index) => {
-    if (anchor) {
-      anchor.visible(true);
-      anchor.moveToTop();
-      console.log(`Якорь ${index} показан:`, anchor.x(), anchor.y());
-    }
-  });
-  
-  // Переключаем видимость изображений
-  if (group.normalImage) {
-    group.normalImage.visible(false);
-    console.log('Обычное изображение скрыто');
-  }
-  if (group.perspectiveShape) {
-    group.perspectiveShape.visible(true);
-    console.log('Перспективная форма показана');
-  }
-  
-  if (group.updateMode) {
-    group.updateMode();
-  }
-  
-  console.log('Якоря показаны, активная группа:', window.activePerspectiveGroup);
-  
-  window.canvasLayer.draw();
-  updateLayersList();
-}
-
-// Скрыть элементы управления перспективой
-function hidePerspectiveControls(group) {
-  if (!group || !group.anchors) {
-    return;
-  }
-  
-  // Скрываем якоря
-  group.anchors.forEach(anchor => {
-    anchor.visible(false);
-  });
-  
-  // Возвращаем обычное изображение
-  if (group.normalImage) {
-    group.normalImage.visible(true);
-  }
-  if (group.perspectiveShape) {
-    group.perspectiveShape.visible(false);
-  }
-  
-  if (window.activePerspectiveGroup === group) {
-    window.activePerspectiveGroup = null;
-  }
-  
-  if (group.updateMode) {
-    group.updateMode();
-  }
-  
-  window.canvasLayer.draw();
-  updateLayersList();
-}
-
-// Создание изображения с поддержкой обоих режимов
-function createImage(img, x, y, width, height, name) {
-  const group = new Konva.Group({
-    x: x,
-    y: y,
-    draggable: true,
-    name: 'image-item',
-  });
-  const displayName = name || 'Слой';
-  group.setAttr('displayName', displayName);
-  group.setAttr('isImageItem', true);
-  
-  // Исходные координаты углов для перспективы
-  const corners = [
-    { x: 0, y: 0 },                    // topLeft
-    { x: width, y: 0 },                // topRight
-    { x: 0, y: height },               // bottomLeft
-    { x: width, y: height }            // bottomRight
+  const A = [
+    [src1.x, src1.y, 1, 0, 0, 0],
+    [0, 0, 0, src1.x, src1.y, 1],
+    [src2.x, src2.y, 1, 0, 0, 0],
+    [0, 0, 0, src2.x, src2.y, 1],
+    [src3.x, src3.y, 1, 0, 0, 0],
+    [0, 0, 0, src3.x, src3.y, 1]
   ];
   
-  // Сохраняем исходное изображение (используем то же самое)
-  // img уже загружен, просто сохраняем ссылку
+  const b = [dst1.x, dst1.y, dst2.x, dst2.y, dst3.x, dst3.y];
   
-  // Обычное изображение для стандартного режима
-  const normalImage = new Konva.Image({
-    image: img,
-    width: width,
-    height: height,
-    name: 'normal-image',
-  });
+  const result = solveLinearSystem(A, b);
   
-  // Кастомная форма для перспективной трансформации
-  const perspectiveShape = new Konva.Shape({
-    sceneFunc: function(context) {
-      // В Konva context - это Konva.Context, получаем реальный canvas context
-      // В Konva v9 используем _context для доступа к реальному canvas context
-      const ctx = context._context || context;
-      
-      const cornersLocal = corners.map(c => ({
-        x: c.x,
-        y: c.y
-      }));
-      // Используем сохранённое изображение
-      const imgToUse = group.originalImage || img;
-      if (imgToUse && imgToUse.complete && ctx && ctx.drawImage) {
-        try {
-          perspectiveTransform(ctx, imgToUse, cornersLocal);
-        } catch (error) {
-          console.warn('Ошибка при рисовании перспективы:', error);
-        }
-      }
-    },
-    fill: 'transparent',
-    listening: true,
-    visible: false,
-    name: 'perspective-image',
-  });
-  
-  group.add(normalImage);
-  group.add(perspectiveShape);
-  
-  // Функция переключения между режимами
-  function updateMode() {
-    if (window.perspectiveMode && window.activePerspectiveGroup === group) {
-      // Показываем перспективу только для активной группы
-      normalImage.visible(false);
-      perspectiveShape.visible(true);
-    } else {
-      // Для всех остальных - обычное изображение
-      normalImage.visible(true);
-      perspectiveShape.visible(false);
-    }
+  if (result) {
+    return [
+      result[0], result[3],  // a, d
+      result[1], result[4],  // b, e
+      result[2], result[5]    // c, f
+    ];
   }
   
-  // Создаем 4 точки для управления углами перспективы
-  const anchorSize = 12;
-  const anchors = [];
-  const anchorNames = ['topLeft', 'topRight', 'bottomLeft', 'bottomRight'];
-  
-  anchorNames.forEach((name, index) => {
-    const anchor = new Konva.Circle({
-      x: corners[index].x,
-      y: corners[index].y,
-      radius: anchorSize,
-      fill: '#4A90E2',
-      stroke: '#fff',
-      strokeWidth: 3,
-      draggable: true,
-      name: `anchor-${name}`,
-      visible: false,
-    });
-    
-    anchor.on('dragmove', function() {
-      corners[index].x = this.x();
-      corners[index].y = this.y();
-      window.canvasLayer.draw();
-    });
-    
-    anchors.push(anchor);
-    group.add(anchor);
-  });
-  
-  // Обработчик клика на изображение
-  function handleImageClick(e) {
-    if (window.eraserMode) {
-      startEraser(e);
-      return;
-    }
-    
-    // НЕ блокируем всплытие - чтобы работало перетаскивание
-    // e.cancelBubble = true; <-- УБРАЛИ
-    
-    if (window.perspectiveMode) {
-      if (window.activePerspectiveGroup && window.activePerspectiveGroup !== group) {
-        hidePerspectiveControls(window.activePerspectiveGroup);
-      }
-      showPerspectiveControls(group);
-    } else {
-      if (window.activePerspectiveGroup) {
-        hidePerspectiveControls(window.activePerspectiveGroup);
-      }
-      
-      getImageGroups().forEach(g => {
-        if (g !== group && g.hasName('selected')) {
-          g.removeName('selected');
-        }
-      });
-      window.canvasTransformer.nodes([group]);
-      group.addName('selected');
-    }
-    window.canvasLayer.draw();
-    updateLayersList();
-  }
-  
-  normalImage.on('click', handleImageClick);
-  perspectiveShape.on('click', handleImageClick);
-  
-  // Делаем группу всегда перетаскиваемой (в обоих режимах)
-  group.on('dragstart', () => {
-    // В режиме транспортировки прячем якоря во время перетаскивания
-    if (window.perspectiveMode && window.activePerspectiveGroup === group) {
-      group.anchors.forEach(a => a.visible(false));
-    }
-  });
-  
-  group.on('dragend', () => {
-    // После перетаскивания показываем якоря обратно
-    if (window.perspectiveMode && window.activePerspectiveGroup === group) {
-      group.anchors.forEach(a => a.visible(true));
-    }
-    updateLayersList();
-  });
-  
-  // Сохраняем ссылки в группе
-  group.corners = corners;
-  group.anchors = anchors;
-  group.normalImage = normalImage;
-  group.perspectiveShape = perspectiveShape;
-  group.updateMode = updateMode;
-  group.originalImage = img; // Сохраняем исходное изображение для перспективы
-  
-  updateMode();
-  
-  return group;
+  return null;
 }
 
-// Функция добавления изображения на canvas
-function addImageToCanvas(url, name) {
-  const img = new Image();
-  img.crossOrigin = 'anonymous';
-  console.log('[addImageToCanvas] start', { url, name });
-  
-  img.onload = () => {
-    console.log('[addImageToCanvas] loaded', { w: img.width, h: img.height });
-    
-    const initialScale = 0.4;
-    const initialWidth = img.width * initialScale;
-    const initialHeight = img.height * initialScale;
-    const initialX = window.canvasStage.width() / 2 - initialWidth / 2;
-    const initialY = window.canvasStage.height() / 2 - initialHeight / 2;
-    
-    const imageGroup = createImage(
-      img,
-      initialX,
-      initialY,
-      initialWidth,
-      initialHeight,
-      name || 'item'
-    );
-    
-    window.canvasLayer.add(imageGroup);
-    
-    // Выбираем добавленное изображение
-    if (window.perspectiveMode) {
-      // В режиме транспортировки - показываем якоря
-      if (window.activePerspectiveGroup && window.activePerspectiveGroup !== imageGroup) {
-        hidePerspectiveControls(window.activePerspectiveGroup);
-      }
-      showPerspectiveControls(imageGroup);
-    } else {
-      // В обычном режиме - применяем трансформер
-      getImageGroups().forEach(g => {
-        if (g.hasName('selected')) {
-          g.removeName('selected');
-        }
-      });
-      window.canvasTransformer.nodes([imageGroup]);
-      imageGroup.addName('selected');
-    }
-    
-    window.canvasLayer.draw();
-    updateLayersList();
-    console.log('[addImageToCanvas] drawn and selected');
-  };
-  
-  img.onerror = () => {
-    console.warn('Не удалось загрузить изображение:', url);
-  };
-  
-  if (url.startsWith('/api/')) {
-    img.src = url;
-  } else {
-    img.src = `/api/proxy?url=${encodeURIComponent(url)}`;
-  }
-}
+// ========================================
+// ФУНКЦИИ ДЛЯ РАБОТЫ С МОДАЛЬНЫМ ОКНОМ
+// ========================================
 
-// Обработчик кнопки транспортировки
-if (btnTransform) {
-  console.log('Обработчик кнопки транспортировки зарегистрирован');
-  btnTransform.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    console.log('Кнопка транспортировки нажата');
-    togglePerspectiveMode();
-  });
-} else {
-  console.error('Кнопка btnTransform не найдена!');
-}
-
-// Горячая клавиша Ctrl+T
-window.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 't') {
-    e.preventDefault();
-    togglePerspectiveMode();
+// Открывает модальное окно 3D-преобразования
+function open3DTransformModal() {
+  // Проверяем, есть ли выбранное изображение
+  const selectedGroups = getImageGroups().filter(g => g.hasName('selected'));
+  
+  if (selectedGroups.length === 0) {
+    alert('Выберите изображение для 3D-преобразования');
     return;
   }
   
-  // Отключение ластика при нажатии Escape
-  if (e.key === 'Escape' && window.eraserMode) {
-    setEraserMode(false);
+  if (selectedGroups.length > 1) {
+    alert('Выберите только одно изображение для 3D-преобразования');
     return;
   }
   
-  // Удаление по клавишам Delete / Backspace
-  if (e.key === 'Delete' || e.key === 'Backspace') {
-    const tag = (document.activeElement && document.activeElement.tagName) || '';
-    if (tag.toLowerCase() === 'input' || tag.toLowerCase() === 'textarea') return;
-    deleteSelected();
-  }
-});
-
-// Удаление выбранного элемента
-function deleteSelected() {
-  if (window.perspectiveMode && window.activePerspectiveGroup) {
-    window.activePerspectiveGroup.destroy();
-    window.activePerspectiveGroup = null;
-    window.canvasLayer.draw();
-  } else {
-    const nodes = window.canvasTransformer.nodes();
-    if (nodes && nodes.length > 0) {
-      nodes.forEach(n => {
-        n.destroy();
-      });
-      window.canvasTransformer.nodes([]);
-      window.canvasLayer.draw();
-    }
-  }
-  updateLayersList();
+  // Сохраняем выбранную группу
+  window.activePerspectiveGroup = selectedGroups[0];
+  
+  // Получаем текущие значения углов (если они были сохранены)
+  const currentAngles = window.activePerspectiveGroup.getAttr('perspectiveAngles') || { x: 0, y: 0, z: 0 };
+  
+  // Обновляем значения в полях ввода
+  document.getElementById('angleX').value = currentAngles.x;
+  document.getElementById('angleY').value = currentAngles.y;
+  document.getElementById('angleZ').value = currentAngles.z;
+  
+  // Показываем модальное окно
+  const modal = document.getElementById('transform3DModal');
+  modal.classList.add('show');
 }
 
+// Закрывает модальное окно
+function close3DTransformModal() {
+  const modal = document.getElementById('transform3DModal');
+  modal.classList.remove('show');
+  window.activePerspectiveGroup = null;
+}
+
+// Применяет 3D-преобразование к выбранному изображению
+function apply3DTransform() {
+  if (!window.activePerspectiveGroup) {
+    alert('Не выбрано изображение для преобразования');
+    return;
+  }
+  
+  // Получаем значения углов из полей ввода
+  const angleX = parseFloat(document.getElementById('angleX').value) || 0;
+  const angleY = parseFloat(document.getElementById('angleY').value) || 0;
+  const angleZ = parseFloat(document.getElementById('angleZ').value) || 0;
+  
+  // Сохраняем состояние для истории отмены
+  if (typeof window.saveHistoryState === 'function') {
+    window.saveHistoryState();
+  }
+  
+  // Сохраняем углы в атрибутах группы
+  window.activePerspectiveGroup.setAttr('perspectiveAngles', { x: angleX, y: angleY, z: angleZ });
+  
+  // Получаем изображение из группы
+  const image = window.activePerspectiveGroup.findOne('.normal-image');
+  if (!image) {
+    alert('Изображение не найдено в группе');
+    return;
+  }
+  
+  // Получаем размеры изображения
+  const width = image.width();
+  const height = image.height();
+  
+  // Определяем 4 угла изображения (в локальных координатах)
+  const corners = [
+    { x: 0, y: 0 },           // Верхний левый
+    { x: width, y: 0 },       // Верхний правый
+    { x: width, y: height },  // Нижний правый
+    { x: 0, y: height }       // Нижний левый
+  ];
+  
+  // Центр изображения
+  const centerX = width / 2;
+  const centerY = height / 2;
+  
+  // Создаём комбинированную матрицу вращения
+  const rx = rotationMatrixX(angleX);
+  const ry = rotationMatrixY(angleY);
+  const rz = rotationMatrixZ(angleZ);
+  
+  // Порядок применения: Z -> Y -> X
+  let rotationMatrix = multiplyMatrices(rz, ry);
+  rotationMatrix = multiplyMatrices(rotationMatrix, rx);
+  
+  // Настройки перспективы
+  const focalLength = Math.max(width, height); // Фокусное расстояние "камеры"
+  const distance = Math.max(width, height) * 2; // Расстояние от "камеры"
+  
+  // Применяем трансформацию к каждому углу
+  const transformedCorners = corners.map(corner => {
+    // Переносим в центр (для вращения вокруг центра)
+    const x = corner.x - centerX;
+    const y = corner.y - centerY;
+    const z = 0; // Изначально изображение плоское (z = 0)
+    
+    // Применяем матрицу вращения
+    const rotated = multiplyMatrixVector(rotationMatrix, [x, y, z]);
+    
+    // Применяем перспективную проекцию
+    const projected = perspectiveProjection(rotated[0], rotated[1], rotated[2], focalLength, distance);
+    
+    // Возвращаем обратно из центра
+    return {
+      x: projected.x + centerX,
+      y: projected.y + centerY
+    };
+  });
+  
+  // Проверяем, существует ли уже перспективное изображение
+  let perspectiveImage = window.activePerspectiveGroup.findOne('.perspective-image');
+  
+  // Получаем HTML изображение
+  const htmlImage = image.image();
+  
+  if (!perspectiveImage) {
+    // Сохраняем данные в переменных для использования в замыкании
+    const imageData = {
+      htmlImage: htmlImage,
+      originalWidth: width,
+      originalHeight: height,
+      corners: transformedCorners
+    };
+    
+    // Создаём новое перспективное изображение с кастомной функцией рисования
+    perspectiveImage = new Konva.Shape({
+      name: 'perspective-image',
+      visible: true,
+      // Кастомная функция рисования с перспективной трансформацией
+      sceneFunc: function(context) {
+        const ctx = context._context;
+        // Используем замыкание для доступа к данным
+        const img = imageData.htmlImage;
+        const corners = imageData.corners;
+        const w = imageData.originalWidth;
+        const h = imageData.originalHeight;
+        
+        if (!img || !corners || corners.length !== 4) return;
+        
+        // Сохраняем текущее состояние контекста
+        ctx.save();
+        
+        // Исходные координаты углов изображения
+        const srcCorners = [
+          { x: 0, y: 0 },      // Верхний левый
+          { x: w, y: 0 },      // Верхний правый
+          { x: w, y: h },      // Нижний правый
+          { x: 0, y: h }       // Нижний левый
+        ];
+        
+        // Рисуем изображение через два треугольника для перспективной трансформации
+        // Треугольник 1: верхний левый, верхний правый, нижний правый
+        drawPerspectiveTriangle(ctx, img, 
+          srcCorners[0], srcCorners[1], srcCorners[2],
+          corners[0], corners[1], corners[2]);
+        
+        // Треугольник 2: верхний левый, нижний правый, нижний левый
+        drawPerspectiveTriangle(ctx, img,
+          srcCorners[0], srcCorners[2], srcCorners[3],
+          corners[0], corners[2], corners[3]);
+        
+        // Восстанавливаем состояние контекста
+        ctx.restore();
+      }
+    });
+    
+    // Сохраняем ссылку на imageData в узле для обновления
+    perspectiveImage._perspectiveData = imageData;
+    
+    // Скрываем оригинальное изображение
+    image.visible(false);
+    
+    // Добавляем перспективное изображение в группу
+    window.activePerspectiveGroup.add(perspectiveImage);
+  } else {
+    // Обновляем данные существующего перспективного изображения
+    if (perspectiveImage._perspectiveData) {
+      perspectiveImage._perspectiveData.corners = transformedCorners;
+      perspectiveImage._perspectiveData.htmlImage = htmlImage;
+    }
+    
+    // Очищаем кэш и принудительно перерисовываем форму
+    if (perspectiveImage.cache) {
+      perspectiveImage.clearCache();
+    }
+  }
+  
+  // Обновляем холст
+  window.canvasLayer.draw();
+  
+  // Обновляем список слоёв
+  if (typeof updateLayersList === 'function') {
+    updateLayersList();
+  }
+  
+  // Закрываем модальное окно
+  close3DTransformModal();
+  
+  console.log('3D-преобразование применено:', { angleX, angleY, angleZ });
+}
+
+// Сбрасывает 3D-преобразование (возвращает изображение в исходное состояние)
+function reset3DTransform() {
+  if (!window.activePerspectiveGroup) {
+    return;
+  }
+  
+  // Сохраняем состояние для истории отмены
+  if (typeof window.saveHistoryState === 'function') {
+    window.saveHistoryState();
+  }
+  
+  // Получаем изображения
+  const normalImage = window.activePerspectiveGroup.findOne('.normal-image');
+  const perspectiveImage = window.activePerspectiveGroup.findOne('.perspective-image');
+  
+  if (perspectiveImage) {
+    // Удаляем перспективное изображение
+    perspectiveImage.destroy();
+  }
+  
+  if (normalImage) {
+    // Показываем оригинальное изображение
+    normalImage.visible(true);
+  }
+  
+  // Сбрасываем углы
+  window.activePerspectiveGroup.setAttr('perspectiveAngles', { x: 0, y: 0, z: 0 });
+  
+  // Обнуляем поля ввода
+  document.getElementById('angleX').value = 0;
+  document.getElementById('angleY').value = 0;
+  document.getElementById('angleZ').value = 0;
+  
+  // Обновляем холст
+  window.canvasLayer.draw();
+  
+  // Обновляем список слоёв
+  if (typeof updateLayersList === 'function') {
+    updateLayersList();
+  }
+  
+  console.log('3D-преобразование сброшено');
+}
+
+// Функция для скрытия контролов 3D (вызывается при экспорте)
+function hide3DTransformControls(group) {
+  // Эта функция нужна для совместимости с app.js
+  // В текущей реализации контролов нет, но функция должна существовать
+}
+
+// ========================================
+// ИНИЦИАЛИЗАЦИЯ ОБРАБОТЧИКОВ СОБЫТИЙ
+// ========================================
+
+// Кнопка открытия модального окна
+const btn3DTransform = document.getElementById('btn3DTransform');
+if (btn3DTransform) {
+  btn3DTransform.addEventListener('click', open3DTransformModal);
+}
+
+// Кнопка закрытия модального окна
+const closeModal = document.getElementById('closeModal');
+if (closeModal) {
+  closeModal.addEventListener('click', close3DTransformModal);
+}
+
+// Кнопка "Преобразовать"
+const btnApply3D = document.getElementById('btnApply3D');
+if (btnApply3D) {
+  btnApply3D.addEventListener('click', apply3DTransform);
+}
+
+// Кнопка "Сбросить"
+const btnReset3D = document.getElementById('btnReset3D');
+if (btnReset3D) {
+  btnReset3D.addEventListener('click', reset3DTransform);
+}
+
+// Закрытие модального окна при клике на фон
+const modal = document.getElementById('transform3DModal');
+if (modal) {
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      close3DTransformModal();
+    }
+  });
+}
+
+// Делаем функции доступными глобально
+window.open3DTransformModal = open3DTransformModal;
+window.close3DTransformModal = close3DTransformModal;
+window.apply3DTransform = apply3DTransform;
+window.reset3DTransform = reset3DTransform;
+window.hide3DTransformControls = hide3DTransformControls;
+
+console.log('Модуль 3D-преобразования загружен');
 

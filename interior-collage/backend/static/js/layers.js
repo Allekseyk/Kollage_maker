@@ -33,7 +33,7 @@ function updateLayersList() {
     layerItem.className = 'layer-item';
     
     // Проверяем, выбран ли этот слой
-    if (group.hasName('selected') || window.activePerspectiveGroup === group) {
+    if (group.hasName('selected')) {
       layerItem.classList.add('selected');
     }
     
@@ -141,27 +141,27 @@ function selectLayer(group) {
     }
   });
   
-  if (window.perspectiveMode) {
-    // В режиме транспортировки
-    if (window.activePerspectiveGroup && window.activePerspectiveGroup !== group) {
-      hidePerspectiveControls(window.activePerspectiveGroup);
+  // В обычном режиме (режим трансформации был удалён)
+  // Проверяем, что группа существует перед выделением
+  try {
+    if (group.getParent()) {
+      window.canvasTransformer.nodes([group]);
+      group.addName('selected');
+      window.canvasLayer.draw();
+      updateLayersList();
     }
-    showPerspectiveControls(group);
-  } else {
-    // В обычном режиме
-    if (window.activePerspectiveGroup) {
-      hidePerspectiveControls(window.activePerspectiveGroup);
-    }
-    window.canvasTransformer.nodes([group]);
-    group.addName('selected');
+  } catch (e) {
+    console.warn('Ошибка при выборе слоя:', e);
   }
-  
-  window.canvasLayer.draw();
-  updateLayersList();
 }
 
 // Копирование слоя
 function duplicateLayer(group) {
+  // Сохраняем состояние перед копированием
+  if (typeof window.saveHistoryState === 'function') {
+    window.saveHistoryState();
+  }
+  
   // Ищем изображение в группе
   let imageNode = null;
   const children = group.getChildren();
@@ -202,6 +202,11 @@ function duplicateLayer(group) {
 
 // Перемещение слоя вверх
 function moveLayerUp(group) {
+  // Сохраняем состояние перед перемещением
+  if (typeof window.saveHistoryState === 'function') {
+    window.saveHistoryState();
+  }
+  
   group.moveUp();
   window.canvasLayer.draw();
   updateLayersList();
@@ -209,8 +214,60 @@ function moveLayerUp(group) {
 
 // Перемещение слоя вниз
 function moveLayerDown(group) {
+  // Сохраняем состояние перед перемещением
+  if (typeof window.saveHistoryState === 'function') {
+    window.saveHistoryState();
+  }
+  
   group.moveDown();
   window.canvasLayer.draw();
   updateLayersList();
 }
+
+// Удаление выбранных элементов
+function deleteSelected() {
+  // Получаем все выделенные группы
+  const selectedGroups = getImageGroups().filter(group => {
+    // Проверяем, что группа существует и не удалена
+    try {
+      return group.hasName && group.hasName('selected') && group.getParent();
+    } catch (e) {
+      return false;
+    }
+  });
+  
+  if (selectedGroups.length === 0) {
+    console.log('Нет выделенных элементов для удаления');
+    return;
+  }
+  
+  // Сохраняем состояние перед удалением
+  if (typeof window.saveHistoryState === 'function') {
+    window.saveHistoryState();
+  }
+  
+  // Сначала убираем трансформер, чтобы избежать ошибок
+  window.canvasTransformer.nodes([]);
+  
+  // Удаляем каждую выделенную группу
+  selectedGroups.forEach(group => {
+    try {
+      // Проверяем, что группа всё ещё существует перед удалением
+      if (group.getParent()) {
+        group.destroy(); // Удаляем группу из Konva
+      }
+    } catch (e) {
+      console.warn('Ошибка при удалении группы:', e);
+    }
+  });
+  
+  // Перерисовываем холст
+  window.canvasLayer.draw();
+  
+  // Обновляем список слоёв
+  updateLayersList();
+}
+
+// Делаем функцию доступной глобально
+window.deleteSelected = deleteSelected;
 

@@ -27,18 +27,6 @@ function initEraserLayer() {
 function setEraserMode(enabled) {
   window.eraserMode = enabled;
   
-  // Отключаем режим транспортировки при включении ластика
-  if (enabled && window.perspectiveMode) {
-    window.perspectiveMode = false;
-    if (window.activePerspectiveGroup) {
-      hidePerspectiveControls(window.activePerspectiveGroup);
-    }
-    const btnTransform = document.getElementById('btnTransform');
-    if (btnTransform) {
-      btnTransform.classList.remove('active');
-    }
-  }
-  
   if (btnEraser) {
     if (enabled) {
       btnEraser.classList.add('active');
@@ -66,6 +54,12 @@ function setEraserMode(enabled) {
 // Начало стирания
 function startEraser(e) {
   if (!window.eraserMode) return;
+  
+  // Сохраняем состояние перед началом стирания (только один раз)
+  if (!window.isEraserDrawing && typeof window.saveHistoryState === 'function') {
+    window.saveHistoryState();
+  }
+  
   window.isEraserDrawing = true;
   const pos = window.canvasStage.getPointerPosition();
   applyEraserImproved(pos.x, pos.y);

@@ -20,9 +20,10 @@
     <main class="canvas-area">
       <div class="toolbar">
         <button id="btnClear" class="btn">Очистить</button>
-        <button id="btnDelete" class="btn">Удалить выбранное</button>
-        <button id="btnTransform" class="btn">Транспортировать</button>
         <button id="btnEraser" class="btn">Ластик</button>
+        <button id="btnSelectionRect" class="btn">Выделение (прямоугольник)</button>
+        <button id="btnSelectionLasso" class="btn">Выделение (лассо)</button>
+        <button id="btn3DTransform" class="btn">🎬 3D-преобразование</button>
         <div class="eraser-controls" id="eraserControls" style="display: none;">
           <label style="font-size: 12px; margin-left: 8px;">Радиус:</label>
           <input type="range" id="eraserSize" min="5" max="100" value="30" style="width: 120px; margin-left: 4px;">
@@ -36,9 +37,46 @@
     <aside class="layers-panel">
       <div class="layers-header">
         <h3>Слои</h3>
+        <button id="btnDelete" class="btn-delete" title="Удалить выбранное">🗑️</button>
       </div>
       <div id="layers-list" class="layers-list"></div>
     </aside>
+  </div>
+
+  <!-- Модальное окно для 3D-преобразования -->
+  <div id="transform3DModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>🎬 3D-преобразование</h3>
+        <button class="modal-close" id="closeModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 12px; color: #6B7280; margin-bottom: 16px;">
+          Укажите углы вращения для перспективной трансформации изображения
+        </p>
+        <div class="transform-controls">
+          <div class="transform-row">
+            <label>Угол X (↕️)</label>
+            <input type="number" id="angleX" value="0" step="5" min="-90" max="90" />
+            <span class="unit">°</span>
+          </div>
+          <div class="transform-row">
+            <label>Угол Y (↔️)</label>
+            <input type="number" id="angleY" value="0" step="5" min="-90" max="90" />
+            <span class="unit">°</span>
+          </div>
+          <div class="transform-row">
+            <label>Угол Z (⟲)</label>
+            <input type="number" id="angleZ" value="0" step="5" min="-180" max="180" />
+            <span class="unit">°</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnReset3D" class="btn">Сбросить</button>
+        <button id="btnApply3D" class="btn btn-primary">Преобразовать</button>
+      </div>
+    </div>
   </div>
 
   <!-- Подключаем модули приложения -->
@@ -46,11 +84,13 @@
   <script src="/static/js/utils.js"></script>      <!-- 1. Вспомогательные функции -->
   <script src="/static/js/api.js"></script>        <!-- 2. API запросы -->
   <script src="/static/js/canvas.js"></script>     <!-- 3. Холст Konva -->
-  <script src="/static/js/perspective.js"></script><!-- 4. Режим транспортировки -->
+  <script src="/static/js/history.js"></script>    <!-- 4. История действий (отмена) -->
   <script src="/static/js/eraser.js"></script>     <!-- 5. Ластик -->
-  <script src="/static/js/layers.js"></script>     <!-- 6. Управление слоями -->
-  <script src="/static/js/catalog.js"></script>    <!-- 7. Каталог товаров -->
-  <script src="/static/app.js"></script>           <!-- 8. Главный файл -->
+  <script src="/static/js/selection.js"></script>  <!-- 6. Инструмент выделения -->
+  <script src="/static/js/perspective.js"></script><!-- 7. 3D-преобразование -->
+  <script src="/static/js/layers.js"></script>     <!-- 8. Управление слоями -->
+  <script src="/static/js/catalog.js"></script>    <!-- 9. Каталог товаров -->
+  <script src="/static/app.js"></script>           <!-- 10. Главный файл -->
   
 </body>
 <!-- Конец документа -->
